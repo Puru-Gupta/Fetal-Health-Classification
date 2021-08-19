@@ -1,0 +1,128 @@
+---
+title: "Fetal Health Classification"
+author: "Purushottam Gupta"
+date: "8/15/2021"
+output: html_document
+---
+```{r}
+library(caret)
+library(psych)
+library(nnet)
+library(quantmod)
+library(PerformanceAnalytics)
+library(randomForest)
+library(xgboost)
+library(Boruta)
+```
+
+
+
+
+
+```{r}
+CTG.data <- read.csv("C:/Users/raunak/Desktop/CTG/Cardiotoctg.csv")
+View(CTG.data)
+```
+
+```{r}
+CTG.data <- read.csv(file.choose())
+```
+
+```{r}
+str(CTG.data)
+prop.table(table((CTG.data$NSP)))
+```
+
+```{r}
+CTG.data$NSP <- as.factor(CTG.data$NSP)
+CTG.data$NSP <- relevel(CTG.data$ NSP, ref = '1')
+```
+
+```{r}
+set.seed(123)
+ind <- createDataPartition(CTG.data$NSP, times = 1, p = 0.7, list = F)
+train <- CTG.data[ind,]
+test <- CTG.data[-ind,]
+prop.table(table((train$NSP)))
+```
+```{r}
+boruta <- Boruta(NSP~., data = CTG.data, doTrace = 2,  maxRuns = 100)
+print(boruta)
+plot(boruta)
+plotImpHistory(boruta)
+attStats(boruta)
+```
+
+```{r}
+ggplot(CTG.data, aes(x = log(AC), y = log(ALTV), fill ='blue')) +  geom_point()
+```
+
+
+
+
+```{r}
+Model <- multinom(NSP~.-Nzeros- Width, data = train)
+pred <- predict(Model, train)
+confusionMatrix(pred, train$NSP)
+```
+
+```{r}
+#prediction on test data                 
+pred <- predict(Model, test)
+confusionMatrix(pred, test$NSP)
+```
+
+```{r}
+#prediction on test data using random Forest
+library(randomForest)
+model2 <- randomForest(NSP~., data = train)
+pred2 <- predict(model2, test)
+confusionMatrix(pred2, test$NSP)
+
+
+##########################################################
+
+```
+```{r}
+set.seed(1234)
+cvcontrol <- trainControl(method = "repeatedcv",
+                          number = 5,
+                          repeats = 2,
+                          allowParallel = T)
+
+bag <- train(NSP~.,
+             data = train,
+             method = "treebag",
+             trControl = cvcontrol,
+             importance =T)
+
+plot(varImp(bag))
+varImpPlot(model2)
+```
+```{r}
+pred3 <- predict(bag, test)
+confusionMatrix(pred3, test$NSP)
+```
+
+```{r}
+
+library(xgboost)
+set.seed(1234)
+Boosting <- train(NSP~.,
+                  data = train,
+                  method = "xgbTree",
+                  trControl = cvcontrol,
+                  tuneGrid =expand.grid(nrounds = 600,
+                                        max_depth =5,
+                                        eta = 0.2,
+                                        gamma    = 2,
+                                        colsample_bytree =1,
+                                        min_child_weight =1,
+                                        subsample =1))
+```
+
+```{r}
+pred4 <- predict(bag, test)
+confusionMatrix(pred4, test$NSP)
+confusionMatrix(pred3, test$NSP)
+```
